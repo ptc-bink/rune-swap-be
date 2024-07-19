@@ -557,6 +557,7 @@ export const burn_token = async (runeID: string) => {
     tokenSum += runeutxo.amount;
   }
 
+  // runestone psh edicts
   edicts.push({
     id: new RuneId(runeBlockNumber, runeTxout),
     amount: confirmAmount,
