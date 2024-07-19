@@ -94,7 +94,7 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 For questions, suggestions, or feedback, feel free to reach out:
 
-- Twitter: [@ptc-bink](https://x.com/ptcbink)
+- Twitter: [@ptcbink](https://x.com/ptcbink)
 - GitHub: [ptcbink](https://github.com/ptc-bink)
 
 ---
