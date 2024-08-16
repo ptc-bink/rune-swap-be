@@ -1,10 +1,3 @@
-export interface IUtxo {
-    txid: string;
-    vout: number;
-    value: number;
-    scriptpubkey?: string;
-}
-
 export interface IRuneUtxo {
     txid: string;
     vout: number;
@@ -25,9 +18,32 @@ export interface IUTXO {
     value: number;
 }
 
+export enum WalletTypes {
+    UNISAT = "Unisat",
+    XVERSE = "Xverse",
+    HIRO = "Hiro",
+    OKX = "Okx",
+}
+
 export interface ITXSTATUS {
     confirmed: boolean,
     block_height: number,
     block_hash: string,
     block_time: number
+}
+
+export interface IUtxo {
+    txid: string;
+    vout: number;
+    value: number;
+    scriptpubkey: string;
+}
+
+export interface IRuneUtxo {
+    txid: string;
+    vout: number;
+    value: number;
+    scriptpubkey: string;
+    amount: number;
+    divisibility: number;
 }

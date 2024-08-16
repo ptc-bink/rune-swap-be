@@ -1,0 +1,4 @@
+txId = "ef683b64a984f8a7fb6ce3d23c6d33478eedfceeb8c560289bd912da3b063dc5"
+adminRuneAmount1 = "558"
+adminRuneAmount2 = "380"
+txBuilding = "false"
