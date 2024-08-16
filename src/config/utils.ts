@@ -2,7 +2,9 @@ import * as fs from 'fs';
 
 export const getMockContent = async () => {
     let txId, adminRuneAmount1, adminRuneAmount2, txBuilding;
-    const content = fs.readFileSync('./src/controller/config/mock.txt', 'utf8');
+    const content = fs.readFileSync('./src/config/mock.txt', 'utf8');
+
+    console.log('content :>> ', content);
 
     const txIdMatch = content.match(/txId\s*=\s*"([^"]+)"/);
     const adminRuneAmount1Match = content.match(/adminRuneAmount1\s*=\s*"([^"]+)"/);
@@ -26,5 +28,5 @@ export const getMockContent = async () => {
 }
 
 export const updateMockFile = (content: string) => {
-    fs.writeFileSync('./src/controller/config/mock.txt', content, 'utf8')
+    fs.writeFileSync('./src/config/mock.txt', content, 'utf8')
 }

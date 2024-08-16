@@ -1,32 +1,43 @@
 import { Router } from 'express';
-import { adminWallet, getMockContent, pushRawTx, generateRuneSwapPsbt, updateMockFile } from '../controller/userController';
 import { Psbt } from 'bitcoinjs-lib';
+
+import { getMockContent, updateMockFile } from '../config/utils';
+import { pushRawTx } from '../service/service';
+import { adminWallet, generateInitialRuneSwapPsbt, generateRuneSwapPsbt, } from '../controller/userController';
 
 const useRouter = Router();
 
 useRouter.post('/generatePsbt', async (req, res, next) => {
+    const mock = await getMockContent();
+
     try {
         const { pubkey, address, ordinalPubkey, ordinalAddress, sendingAmount, walletType } = req.body;
 
-        const data = await generateRuneSwapPsbt(pubkey, address, ordinalPubkey, ordinalAddress, sendingAmount, walletType);
-
-        console.log('data :>> ', data);
-
-        if (data?.success) {
-            res.status(200).send({ data: data.data })
+        let data
+        if (mock.txId) {
+            data = await generateRuneSwapPsbt(pubkey, address, ordinalPubkey, ordinalAddress, sendingAmount, walletType);
         } else {
-            res.status(404).send({ data: data?.data })
+            data = await generateInitialRuneSwapPsbt(pubkey, address, ordinalPubkey, ordinalAddress, sendingAmount, walletType);
+        }
+
+        console.log('generate rune swap psbt :>> ', data);
+
+        if (data.success === true) {
+            res.status(200).send({ success: true, data: data.data })
+        } else if (data.success === false) {
+            res.status(200).send({ success: false, data: data.data })
         }
     } catch (error) {
-        const mock = await getMockContent();
-
         updateMockFile(mock.content.replace('txBuilding = "true"', 'txBuilding = "false"'))
 
         console.log(error);
+        return res.status(404).send(error)
     }
 });
 
 useRouter.post('/pushPsbt', async (req, res, next) => {
+    const mock = await getMockContent();
+
     try {
         const { success, data } = req.body;
 
@@ -45,7 +56,6 @@ useRouter.post('/pushPsbt', async (req, res, next) => {
             const txId = await pushRawTx(txHex);
             console.log('txId :>> ', txId);
 
-            const mock = await getMockContent();
             const updatedContent = `txId = "${txId}"\n` +
                 `adminRuneAmount1 = "${amount1}"\n` +
                 `adminRuneAmount2 = "${amount2}"\n` +
@@ -54,10 +64,10 @@ useRouter.post('/pushPsbt', async (req, res, next) => {
             updateMockFile(mock.content.replace(mock.content, updatedContent))
 
             res.status(200).send({ data: txId });
+        } else {
+            updateMockFile(mock.content.replace('txBuilding = "true"', 'txBuilding = "false"'))
         }
     } catch (error) {
-        const mock = await getMockContent();
-
         updateMockFile(mock.content.replace('txBuilding = "true"', 'txBuilding = "false"'))
 
         console.log(error);
