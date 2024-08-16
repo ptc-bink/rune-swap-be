@@ -1,8 +1,9 @@
 import * as bitcoin from "bitcoinjs-lib";
 import { isTaprootInput } from "bitcoinjs-lib/src/psbt/bip371.js";
+import { ECPairFactory } from "ecpair";
+
 import ecc from "@bitcoinerlab/secp256k1";
 bitcoin.initEccLib(ecc);
-import { ECPairFactory } from "ecpair";
 const ECPair = ECPairFactory(ecc);
 
 export const toXOnly = (pubKey: string) =>

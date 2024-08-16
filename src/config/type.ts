@@ -18,13 +18,6 @@ export interface IUTXO {
     value: number;
 }
 
-export enum WalletTypes {
-    UNISAT = "Unisat",
-    XVERSE = "Xverse",
-    HIRO = "Hiro",
-    OKX = "Okx",
-}
-
 export interface ITXSTATUS {
     confirmed: boolean,
     block_height: number,
@@ -46,4 +39,11 @@ export interface IRuneUtxo {
     scriptpubkey: string;
     amount: number;
     divisibility: number;
+}
+
+export enum WalletTypes {
+    UNISAT = "Unisat",
+    XVERSE = "Xverse",
+    HIRO = "Hiro",
+    OKX = "Okx",
 }

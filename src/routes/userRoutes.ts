@@ -18,7 +18,11 @@ useRouter.post('/generatePsbt', async (req, res, next) => {
             res.status(404).send({ data: data?.data })
         }
     } catch (error) {
-        throw error
+        const mock = await getMockContent();
+
+        updateMockFile(mock.content.replace('txBuilding = "true"', 'txBuilding = "false"'))
+
+        console.log(error);
     }
 });
 
@@ -56,7 +60,7 @@ useRouter.post('/pushPsbt', async (req, res, next) => {
 
         updateMockFile(mock.content.replace('txBuilding = "true"', 'txBuilding = "false"'))
 
-        throw error
+        console.log(error);
     }
 });
 
