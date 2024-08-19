@@ -76,6 +76,7 @@ export const generateRuneSwapPsbt = async (pubkey: string, userAddress: string, 
     }
   }
 
+  // create new psbt
   const psbt = new bitcoin.Psbt({ network })
 
   let userTokenSum = 0;
