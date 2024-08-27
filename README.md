@@ -1,6 +1,6 @@
-# Rune Burn Project
+# Rune swap Project
 
-Welcome to the Rune Burn Project, a decentralized application (dApp) built in the Bitcoin Rune space. This project leverages React and the Bitcoin CLI to facilitate the burning of runes. Explore the repository to learn more about how it works and how you can contribute!
+Welcome to the Rune swap Project, a decentralized application (dApp) built in the Bitcoin Rune space. This project leverages React and the Bitcoin CLI to facilitate the swaping of runes. Explore the repository to learn more about how it works and how you can contribute!
 
 ## Table of Contents
 
@@ -14,7 +14,7 @@ Welcome to the Rune Burn Project, a decentralized application (dApp) built in th
 
 ## Introduction
 
-The Rune Burn Project is designed to provide a seamless and secure way to burn runes within the Bitcoin ecosystem. By using this dApp, users can ensure their runes are permanently removed from circulation, enhancing the value and scarcity of remaining runes.
+The Rune swap Project is designed to provide a seamless and secure way to swap runes within the Bitcoin ecosystem. By using this dApp, users can ensure their runes are permanently removed from circulation, enhancing the value and scarcity of remaining runes.
 
 ## Features
 
@@ -32,11 +32,11 @@ The Rune Burn Project is designed to provide a seamless and secure way to burn r
     - Send and Sign PSBT with user wallet.
 
 
-2. After confirmed transaction, Transfer and Burn rune token from Receiver wallet to Burning wallet.
+2. After confirmed transaction, Transfer and swap rune token from Receiver wallet to swaping wallet.
 
     - Get rune utxos and btc utxos in receiver wallet.
 
-    - Build PSBT with receiver rune token and utxo balance as input and OP_RETURN value and claim amount of rune token, return rune token, change utxo as output using reciver wallet WIF privatekey, address, and burning wallet address.
+    - Build PSBT with receiver rune token and utxo balance as input and OP_RETURN value and claim amount of rune token, return rune token, change utxo as output using reciver wallet WIF privatekey, address, and swaping wallet address.
     (At that time, set OP_RETURN as invalid)
 
     - Sign PSBT with receiver wallet.
@@ -47,12 +47,12 @@ P.S. All necessary values are in network.config.ts.
 
 ## Installation
 
-To get started with the Rune Burn Project, follow these steps:
+To get started with the Rune swap Project, follow these steps:
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/ptc-bink/rune-burn-be.git
-   cd rune-burn-be
+   git clone https://github.com/ptc-bink/rune-swap-be.git
+   cd rune-swap-be
    ```
 
 2. **Install dependencies:**
@@ -74,8 +74,8 @@ To get started with the Rune Burn Project, follow these steps:
 1. **Access the Application:**
    - Open your browser and navigate to `https://stonefaceords.com/`.
    
-2. **Burn Runes:**
-   - Follow the on-screen instructions to burn your runes securely.
+2. **swap Runes:**
+   - Follow the on-screen instructions to swap your runes securely.
    - Confirm the transaction through the Bitcoin CLI.
 
 ## Contributing
@@ -99,6 +99,6 @@ For questions, suggestions, or feedback, feel free to reach out:
 
 ---
 
-Thank you for visiting the Rune Burn Project! We hope you find it useful and look forward to your contributions.
+Thank you for visiting the Rune swap Project! We hope you find it useful and look forward to your contributions.
 
 Test
