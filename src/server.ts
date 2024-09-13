@@ -6,6 +6,8 @@ import http from 'http';
 
 import swapRouter from './routes/swapRoutes';
 import taprootRouter from './routes/taprootRoutes';
+import testRouter from './routes/testRoutes';
+
 import { connectMongoDB } from './config/db';
 
 const PORT = process.env.PORT || 5001;
@@ -33,6 +35,7 @@ app.use(cors())
 
 app.use('/api/swap', swapRouter);
 app.use('/api/taproot', taprootRouter);
+app.use('/api/test', testRouter);
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
