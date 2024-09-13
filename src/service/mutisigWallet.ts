@@ -1,7 +1,11 @@
 import * as bitcoin from "bitcoinjs-lib";
 import * as ecc from "tiny-secp256k1";
 import { Taptree } from "bitcoinjs-lib/src/types";
-import { tapleafHash } from "bitcoinjs-lib/src/payments/bip341";
+import { toXOnly } from "bitcoinjs-lib/src/psbt/bip371";
+import { tapleafHash, LEAF_VERSION_TAPSCRIPT } from 'bitcoinjs-lib/src/payments/bip341';
+
+import { testVersion } from "../config/config";
+import { finalizePsbtInput } from "./service";
 
 function makeUnspendableInternalKey(provableNonce?: Buffer): Buffer {
   // This is the generator point of secp256k1. Private key is known (equal to 1)
@@ -252,4 +256,35 @@ export class TaprootMultisigWallet {
   signSchnorr(hash: Buffer): Buffer {
     return Buffer.from(ecc.signSchnorr(new Uint8Array(hash), new Uint8Array(this.privateKey)));
   }
+}
+
+export const signAndFinalizeTaprootMultisig = async (
+  taprootMultisig: any,
+  signedPSBT: string,
+  inputArr: Array<number>
+) => {
+  const pubkeyList = taprootMultisig.cosigner;
+  const threshold = taprootMultisig.threshold;
+  const privateKey = taprootMultisig.privateKey;
+
+  const leafPubkeys = pubkeyList.map((pubkey: string) =>
+    toXOnly(Buffer.from(pubkey, "hex"))
+  );
+
+  const multiSigWallet = new TaprootMultisigWallet(
+    leafPubkeys,
+    threshold,
+    Buffer.from(privateKey, "hex"),
+    LEAF_VERSION_TAPSCRIPT
+  ).setNetwork(testVersion ? bitcoin.networks.testnet : bitcoin.networks.bitcoin);
+
+  console.log("multiSigWallet ==> ", multiSigWallet);
+  console.log("signedPSBT ==> ", signedPSBT);
+
+  const tempSignedPSBT = bitcoin.Psbt.fromHex(signedPSBT);
+
+  multiSigWallet.addDummySigs(tempSignedPSBT);
+  const finalizedPsbt = finalizePsbtInput(tempSignedPSBT.toHex(), inputArr);
+
+  return finalizedPsbt;
 }
