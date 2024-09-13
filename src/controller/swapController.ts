@@ -21,7 +21,6 @@ import {
   userDivisibility,
   testFeeRate,
 } from '../config/config';
-import { WalletTypes } from '../config/type';
 import TaprootMultisigModal from "../model/TaprootMultisig";
 import { TaprootMultisigWallet } from "../service/mutisigWallet";
 import dotenv from 'dotenv';
@@ -103,7 +102,7 @@ export const generateRuneSwapPsbt = async (
 
   const edicts: any = [];
   const inputArray: number[] = [];
-  let cnt = 0;
+  let userCnt = 0;
 
   if (userRuneUtxos.tokenSum < sendingAmount * Math.pow(10, userDivisibility) || adminRuneAmount1 < Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility1) || adminRuneAmount2 < Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility2)) {
     const result = await TaprootMultisigModal.updateOne(
@@ -137,8 +136,8 @@ export const generateRuneSwapPsbt = async (
         tapInternalKey: Buffer.from(pubkey, "hex").slice(1, 33)
       });
 
-      inputArray.push(cnt);
-      cnt++;
+      inputArray.push(userCnt);
+      userCnt++;
       userTokenSum += runeutxo.amount;
     }
   }
@@ -164,7 +163,7 @@ export const generateRuneSwapPsbt = async (
     adminVout1,
     adminRuneAmount1,
   )
-  cnt++;
+  userCnt++;
 
   // send admin rune1 to user
   edicts.push({
@@ -180,7 +179,7 @@ export const generateRuneSwapPsbt = async (
     output: 5,
   });
 
-  cnt++;
+  userCnt++;
 
   // create admin rune2 utxo input && edict
   multiSigWallet.addInput(
@@ -267,8 +266,8 @@ export const generateRuneSwapPsbt = async (
         tapInternalKey: Buffer.from(pubkey, "hex").slice(1, 33)
       });
 
-      inputArray.push(cnt);
-      cnt++;
+      inputArray.push(userCnt);
+      userCnt++;
     }
   }
 
@@ -312,9 +311,6 @@ export const generateInitialRuneSwapPsbt = async (
     address: adminAddress
   })
 
-  console.log('adminAddress :>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ', adminAddress);
-
-  console.log('existTaprootMultisig :>> ', existTaprootMultisig);
   if (!existTaprootMultisig) {
     return {
       success: false,
@@ -322,9 +318,7 @@ export const generateInitialRuneSwapPsbt = async (
     }
   }
 
-  const assets = existTaprootMultisig.assets;
-  console.log('existTaprootMultisig?.txBuilding :>> ', existTaprootMultisig?.txBuilding);
-
+  // console.log('existTaprootMultisig?.txBuilding :>> ', existTaprootMultisig?.txBuilding);
   // if (existTaprootMultisig?.txBuilding === true) {
   //   return {
   //     success: false,
@@ -337,14 +331,15 @@ export const generateInitialRuneSwapPsbt = async (
     { $set: { 'txBuilding': true } }
   );
 
+  const assets = existTaprootMultisig.assets;
   const pubkeyList = existTaprootMultisig.cosigner;
   const threshold = existTaprootMultisig.threshold;
   const privateKey = existTaprootMultisig.privateKey;
 
   const adminRuneId1 = assets?.runeId1 as string;
   const adminRuneId2 = assets?.runeId2 as string;
-  const adminDevisibility1 = assets?.divisibility1 as number;
-  const adminDevisibility2 = assets?.divisibility2 as number;
+  const adminDivisibility1 = assets?.divisibility1 as number;
+  const adminDivisibility2 = assets?.divisibility2 as number;
 
   const leafPubkeys = pubkeyList.map((pubkey: string) =>
     toXOnly(Buffer.from(pubkey, "hex"))
@@ -360,8 +355,7 @@ export const generateInitialRuneSwapPsbt = async (
   await delay(20000)
 
   // Fetch
-  const btcUtxos = await getBtcUtxoByAddress(userAddress);
-
+  const userBtcUtxos = await getBtcUtxoByAddress(userAddress);
   const userRuneUtxos = await getRuneUtxoByAddress(userAddress, userRuneId);
   const adminRuneUtxos1 = await getRuneUtxoByAddress(adminAddress, adminRuneId1);
   const adminRuneUtxos2 = await getRuneUtxoByAddress(adminAddress, adminRuneId2);
@@ -376,10 +370,11 @@ export const generateInitialRuneSwapPsbt = async (
   const userTxout = parseInt(userRuneId.split(":")[1]);
 
   const edicts: any = [];
-  const inputArray: number[] = [];
-  let cnt = 0;
+  const userInputArray: number[] = [];
+  const multisigInputArray: number[] = [];
+  let userCnt = 0;
 
-  if (userRuneUtxos.tokenSum < sendingAmount * Math.pow(10, userDivisibility) || adminRuneUtxos1.tokenSum < Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility1) || adminRuneUtxos2.tokenSum < Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility1)) {
+  if (userRuneUtxos.tokenSum < sendingAmount * Math.pow(10, userDivisibility) || adminRuneUtxos1.tokenSum < Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDivisibility1) || adminRuneUtxos2.tokenSum < Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDivisibility1)) {
     const result = await TaprootMultisigModal.updateOne(
       { address: adminAddress },
       { $set: { 'txBuilding': false } }
@@ -409,8 +404,8 @@ export const generateInitialRuneSwapPsbt = async (
         tapInternalKey: Buffer.from(userPubkey, "hex").slice(1, 33)
       });
 
-      inputArray.push(cnt);
-      cnt++;
+      userInputArray.push(userCnt);
+      userCnt++;
       userTokenSum += runeutxo.amount;
     }
   }
@@ -422,8 +417,6 @@ export const generateInitialRuneSwapPsbt = async (
     output: 4,
   })
 
-  console.log('userBlockNumber, userTxout :>> ', userBlockNumber, userTxout);
-
   // return user rune to user address
   edicts.push({
     id: new RuneId(userBlockNumber, userTxout),
@@ -434,7 +427,7 @@ export const generateInitialRuneSwapPsbt = async (
   let adminTokenSum1 = 0;
   // create admin rune1 utxo input && edict
   for (const runeutxo of adminRuneUtxos1.runeUtxos) {
-    if (adminTokenSum1 < Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility1)) {
+    if (adminTokenSum1 < Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDivisibility1)) {
       multiSigWallet.addInput(
         psbt,
         runeutxo.txid,
@@ -442,26 +435,23 @@ export const generateInitialRuneSwapPsbt = async (
         runeutxo.value
       )
 
-      cnt++;
+      userCnt++;
+      multisigInputArray.push(userCnt);
       adminTokenSum1 += runeutxo.amount;
     }
   }
 
-  console.log('adminBlockNumber1, adminTxout1 :>> ', adminBlockNumber1, adminTxout1);
-  console.log('Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility1) :>> ', Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility1));
-  console.log('adminTokenSum1 :>> ', adminTokenSum1);
-
   // send admin rune1 to user
   edicts.push({
     id: new RuneId(adminBlockNumber1, adminTxout1),
-    amount: Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility1),
+    amount: Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDivisibility1),
     output: 2,
   })
 
   // return admin rune1 to admin
   edicts.push({
     id: new RuneId(adminBlockNumber1, adminTxout1),
-    amount: adminTokenSum1 - Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility1),
+    amount: adminTokenSum1 - Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDivisibility1),
     output: 5,
   });
 
@@ -475,7 +465,8 @@ export const generateInitialRuneSwapPsbt = async (
         runeutxo.vout,
         runeutxo.value
       )
-      cnt++;
+      userCnt++;
+      multisigInputArray.push(userCnt);
       adminTokenSum2 += runeutxo.amount;
     }
   }
@@ -483,22 +474,14 @@ export const generateInitialRuneSwapPsbt = async (
   // send admin rune2 to user address
   edicts.push({
     id: new RuneId(adminBlockNumber2, adminTxout2),
-    amount: Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility2),
+    amount: Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDivisibility2),
     output: 3,
   })
-
-  console.log('adminBlockNumber2, adminTxout2 :>> ', adminBlockNumber2, adminTxout2);
-  console.log('Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility2 ):>> ', Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility2));
-  console.log('adminTokenSum2 :>> ', adminTokenSum2);
-  console.log('sendingAmount :>> ', sendingAmount);
-  console.log('sendingRate :>> ', sendingRate);
-  console.log('adminDevisibility2 :>> ', adminDevisibility2);
-  console.log('adminDevisibility1 :>> ', adminDevisibility1);
 
   // return admin rune2 to admin address
   edicts.push({
     id: new RuneId(adminBlockNumber2, adminTxout2),
-    amount: adminTokenSum2 - Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility2),
+    amount: adminTokenSum2 - Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDivisibility2),
     output: 6,
   });
 
@@ -549,7 +532,7 @@ export const generateInitialRuneSwapPsbt = async (
 
   // add btc utxo input
   let totalBtcAmount = 0;
-  for (const btcutxo of btcUtxos) {
+  for (const btcutxo of userBtcUtxos) {
     const fee = calculateTxFee(psbt, feeRate);
     if (totalBtcAmount < fee && btcutxo.value > 10000) {
       totalBtcAmount += btcutxo.value;
@@ -564,8 +547,8 @@ export const generateInitialRuneSwapPsbt = async (
         tapInternalKey: Buffer.from(userPubkey, "hex").slice(1, 33)
       });
 
-      inputArray.push(cnt);
-      cnt++;
+      userInputArray.push(userCnt);
+      userCnt++;
     }
   }
 
@@ -592,9 +575,10 @@ export const generateInitialRuneSwapPsbt = async (
     success: true,
     data: {
       psbt: psbt.toHex(),
-      inputArray: inputArray,
-      amount1: adminTokenSum1 - Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility1),
-      amount2: adminTokenSum2 - Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility2),
+      userInputArray: userInputArray,
+      multisigInputArray: multisigInputArray,
+      amount1: adminTokenSum1 - Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDivisibility1),
+      amount2: adminTokenSum2 - Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDivisibility2),
     }
   }
 };

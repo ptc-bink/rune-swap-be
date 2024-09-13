@@ -4,17 +4,13 @@ import {
     OPENAPI_UNISAT_TOKEN,
     testVersion,
     SIGNATURE_SIZE,
+    OPENAPI_UNISAT_URL
 } from '../config/config';
 import { IRuneUtxo, IUtxo } from '../config/type';
 import axios from 'axios';
-import { LocalWallet, publicKeyToScriptPk } from "../service/localWallet";
-import dotenv from 'dotenv';
 
 const ecc = require("@bitcoinerlab/secp256k1");
 bitcoin.initEccLib(ecc);
-dotenv.config();
-
-const OPENAPI_UNISAT_URL = testVersion ? "https://open-api-testnet.unisat.io" : "https://open-api.unisat.io";
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
