@@ -7,11 +7,11 @@ import * as bitcoin from "bitcoinjs-lib";
 import { toXOnly } from "bitcoinjs-lib/src/psbt/bip371";
 import { LEAF_VERSION_TAPSCRIPT } from "bitcoinjs-lib/src/payments/bip341";
 
-import { TaprootMultisigWallet } from "../service/mutisigWallet";
+import { signAndFinalizeTaprootMultisig, TaprootMultisigWallet } from "../service/mutisigWallet";
 import { testVersion, threshold } from "../config/config";
 import TaprootMultisigModal from '../model/TaprootMultisig';
-import { LocalWallet, randomWIF } from '../service/localWallet';
-import { finalizePsbtInput } from '../service/service';
+import { LocalWallet, MultisigWallet, randomWIF } from '../service/localWallet';
+import { combinePsbt } from '../service/service';
 
 dotenv.config();
 bitcoin.initEccLib(ecc);
@@ -25,14 +25,14 @@ const privateKey1: string = process.env.WIF_KEY1 as string;
 const privateKey2: string = process.env.WIF_KEY2 as string;
 const randomWif: string = randomWIF(testVersion ? 1 : 0);
 
-const adminWallet1 = new LocalWallet(privateKey1 as string, testVersion ? 1 : 0);
-const adminWallet2 = new LocalWallet(privateKey2 as string, testVersion ? 1 : 0);
-const randomWallet = new LocalWallet(randomWif as string, testVersion ? 1 : 0);
+const MultisigWallet1 = new MultisigWallet(privateKey1 as string, testVersion ? 1 : 0);
+const MultisigWallet2 = new MultisigWallet(privateKey2 as string, testVersion ? 1 : 0);
+const randomWallet = new MultisigWallet(randomWif as string, testVersion ? 1 : 0);
 
 export const createTaprootMultisig = async () => {
     try {
-        const leafPubkey1: Buffer = toXOnly(Buffer.from(adminWallet1.pubkey, "hex"));
-        const leafPubkey2: Buffer = toXOnly(Buffer.from(adminWallet2.pubkey, "hex"));
+        const leafPubkey1: Buffer = toXOnly(Buffer.from(MultisigWallet1.pubkey, "hex"));
+        const leafPubkey2: Buffer = toXOnly(Buffer.from(MultisigWallet2.pubkey, "hex"));
         const randomPubkey: Buffer = toXOnly(Buffer.from(randomWallet.pubkey, "hex"));
 
         const leafKey = bip32.fromSeed(rng(64), network);
@@ -49,7 +49,7 @@ export const createTaprootMultisig = async () => {
         console.log('multiSigWallet.address :>> ', multiSigWallet.address);
 
         const newTaproot = new TaprootMultisigModal({
-            cosigner: [adminWallet1.pubkey, adminWallet2.pubkey, randomWallet.pubkey],
+            cosigner: [MultisigWallet1.pubkey, MultisigWallet2.pubkey, randomWallet.pubkey],
             threshold: threshold,
             privateKey: leafKey.privateKey?.toString("hex"),
             tapscript: LEAF_VERSION_TAPSCRIPT,
@@ -60,6 +60,8 @@ export const createTaprootMultisig = async () => {
                 runeId2: '000000:000',
                 divisibility1: 0,
                 divisibility2: 0,
+                runeAmount1: 0,
+                runeAmount2: 0,
             },
         });
 
@@ -82,36 +84,80 @@ export const createTaprootMultisig = async () => {
     }
 };
 
-export const signAndFinalizeTaprootMultisig = async (
-    id: string,
+export const pushSwapPsbt = async (
     psbt: string,
-    inputArray: Array<number>,
+    userSignedHexedPsbt: string,
+    userInputArray: Array<number>,
+    multisigInputArray: Array<number>,
+    adminAddress: string,
+    amount1: number,
+    amount2: number,
 ) => {
-    const taprootMultisig = await TaprootMultisigModal.findById(id);
+    const taprootMultisig = await TaprootMultisigModal.findOne({ address: adminAddress });
     console.log(taprootMultisig);
 
-    if (!taprootMultisig) return;
+    if (!taprootMultisig) return {
+        success: false,
+        message: `${adminAddress} is not existed`,
+        payload: "",
+    };
 
-    const pubkeyList = taprootMultisig.cosigner;
-    const threshold = taprootMultisig.threshold;
-    const privateKey = taprootMultisig.privateKey;
+    const userSignedPsbt = bitcoin.Psbt.fromHex(userSignedHexedPsbt);
 
-    const leafPubkeys = pubkeyList.map((pubkey: string) =>
-        toXOnly(Buffer.from(pubkey, "hex"))
-    );
+    const tempuserInputArray = [0, 1, 4];
+    const tempmultisigInputArray = [2, 3];
+    tempuserInputArray.forEach((input: number) => userSignedPsbt.finalizeInput(input));
+    // userInputArray.forEach((input: number) => userSignedPsbt.finalizeInput(input));
 
-    const multiSigWallet = new TaprootMultisigWallet(
-        leafPubkeys,
-        threshold,
-        Buffer.from(privateKey, "hex"),
-        LEAF_VERSION_TAPSCRIPT
-    ).setNetwork(network);
+    console.log("==========================================================================");
+    console.log('MultisigWallet2.publickey :>> ', MultisigWallet2.pubkey);
+    const adminSignedPsbt1 = await MultisigWallet2.signPsbt(bitcoin.Psbt.fromHex(psbt), {
+        autoFinalized: false, inputs: [
+            {
+                index: 2,
+                publicKey: "03df2729c89fb4d69592abc692ce8d900df7704b73bfe597a9b5ec89159266c763",
+                disableTweakSigner: true
+            },
+            {
+                index: 3,
+                publicKey: "03df2729c89fb4d69592abc692ce8d900df7704b73bfe597a9b5ec89159266c763",
+                disableTweakSigner: true
+            },
+        ]
+    });
+    // const adminSignedPsbt1 = await MultisigWallet2.signPsbt(bitcoin.Psbt.fromHex(psbt), { autoFinalized: false, inputs: tempmultisigInputArray });
 
-    const tempPsbt = bitcoin.Psbt.fromHex(psbt);
+    console.log("==========================================================================");
 
-    multiSigWallet.addDummySigs(tempPsbt);
+    // const adminSignedPsbt1 = await adminWallet1.signPsbt(userSignedPsbt, { autoFinalized: false, inputs: multisigInputArray });
+    // const adminSignedPsbt2 = await adminWallet2.signPsbt(adminSignedPsbt1, { autoFinalized: false, inputs: multisigInputArray });
+    const adminSignedPsbt2 = await MultisigWallet1.signPsbt(adminSignedPsbt1, { autoFinalized: false, inputs: tempmultisigInputArray });
+    console.log("==========================================================================");
 
-    const finalizedPsbt = finalizePsbtInput(tempPsbt.toHex(), inputArray);
+    const finalizedMultisigPsbt = await signAndFinalizeTaprootMultisig(taprootMultisig, adminSignedPsbt2.toHex(), multisigInputArray);
+    console.log("==========================================================================");
 
-    return finalizedPsbt;
+    const txId = await combinePsbt(psbt, finalizedMultisigPsbt, userSignedPsbt.toHex());
+
+    if (txId) {
+        const result = await TaprootMultisigModal.updateMany(
+            { address: adminAddress },
+            { $set: { txBuilding: false, assets: { runeAmount1: amount1, runeAmount2: amount2 } } }
+        );
+        return {
+            success: true,
+            message: `Push swap psbt successfully`,
+            payload: txId,
+        };
+    } else {
+        const result = await TaprootMultisigModal.updateOne(
+            { address: adminAddress },
+            { $set: { txBuilding: false } }
+        );
+        return {
+            success: false,
+            message: `Push swap psbt failed`,
+            payload: undefined,
+        };
+    }
 };

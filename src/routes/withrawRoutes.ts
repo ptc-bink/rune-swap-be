@@ -1,15 +1,15 @@
 import { Router } from 'express';
 import { createTaprootMultisig } from '../controller/taprootController';
 
-const taprootRouter = Router();
+const withrawRouter = Router();
 
-taprootRouter.use(async (req, res, next)  => {
+withrawRouter.use(async (req, res, next)  => {
     console.log('');
     console.log(`Request received for ${req.method} ${req.url}`);
     next();
 })
 
-taprootRouter.post('/generateTaprootMultisig', async (req, res, next) => {
+withrawRouter.post('/generateTaprootMultisig', async (req, res, next) => {
     try {
         const payload = await createTaprootMultisig();
 
@@ -26,4 +26,4 @@ taprootRouter.post('/generateTaprootMultisig', async (req, res, next) => {
     }
 });
 
-export default taprootRouter;
+export default withrawRouter;

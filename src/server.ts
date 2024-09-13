@@ -6,6 +6,7 @@ import http from 'http';
 
 import swapRouter from './routes/swapRoutes';
 import taprootRouter from './routes/taprootRoutes';
+import withrawRouter from './routes/withrawRoutes';
 import testRouter from './routes/testRoutes';
 
 import { connectMongoDB } from './config/db';
@@ -35,6 +36,7 @@ app.use(cors())
 
 app.use('/api/swap', swapRouter);
 app.use('/api/taproot', taprootRouter);
+app.use('/api/withraw', withrawRouter);
 app.use('/api/test', testRouter);
 
 app.listen(PORT, () => {

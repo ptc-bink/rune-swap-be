@@ -35,26 +35,13 @@ export const generateRuneSwapPsbt = async (
   pubkey: string,
   userAddress: string,
   sendingAmount: number,
-  adminAddress: string
+  adminAddress: string,
+  taprootMultisig: any
 ) => {
-  const existTaprootMultisig = await TaprootMultisigModal.findOne({
-    address: adminAddress
-  })
-  const assets = existTaprootMultisig?.assets;
-
-  if (!existTaprootMultisig) {
-    return {
-      success: false,
-      data: "Admin adress is not existed",
-    }
-  }
-
-  const pubkeyList = existTaprootMultisig.cosigner;
-
-  console.log('pubkeyList :>> ', pubkeyList);
-
-  const threshold = existTaprootMultisig.threshold;
-  const privateKey = existTaprootMultisig.privateKey;
+  const pubkeyList = taprootMultisig.cosigner;
+  const assets = taprootMultisig?.assets;
+  const threshold = taprootMultisig.threshold;
+  const privateKey = taprootMultisig.privateKey;
 
   const leafPubkeys = pubkeyList.map((pubkey: string) =>
     toXOnly(Buffer.from(pubkey, "hex"))
@@ -67,7 +54,7 @@ export const generateRuneSwapPsbt = async (
     LEAF_VERSION_TAPSCRIPT
   ).setNetwork(network)
 
-  if (existTaprootMultisig.txBuilding === true) {
+  if (taprootMultisig.txBuilding === true) {
     return {
       success: false,
       data: "utxo is on re-building"
@@ -76,7 +63,7 @@ export const generateRuneSwapPsbt = async (
 
   const result = await TaprootMultisigModal.updateOne(
     { address: adminAddress },
-    { $set: { 'txBuilding': true } }
+    { $set: { txBuilding: true } }
   );
 
   console.log('update taproot modal :>> ', result);
@@ -107,7 +94,7 @@ export const generateRuneSwapPsbt = async (
   if (userRuneUtxos.tokenSum < sendingAmount * Math.pow(10, userDivisibility) || adminRuneAmount1 < Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility1) || adminRuneAmount2 < Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility2)) {
     const result = await TaprootMultisigModal.updateOne(
       { address: adminAddress },
-      { $set: { 'txBuilding': false } }
+      { $set: { txBuilding: false } }
     );
 
     console.log('update taproot modal :>> ', result);
@@ -159,7 +146,7 @@ export const generateRuneSwapPsbt = async (
   // create admin rune1 utxo input && edict
   multiSigWallet.addInput(
     psbt,
-    existTaprootMultisig?.txId as string,
+    taprootMultisig?.txId as string,
     adminVout1,
     adminRuneAmount1,
   )
@@ -184,7 +171,7 @@ export const generateRuneSwapPsbt = async (
   // create admin rune2 utxo input && edict
   multiSigWallet.addInput(
     psbt,
-    existTaprootMultisig?.txId as string,
+    taprootMultisig?.txId as string,
     adminVout2,
     adminRuneAmount2,
   )
@@ -276,7 +263,7 @@ export const generateRuneSwapPsbt = async (
   if (totalBtcAmount < fee) {
     const result = await TaprootMultisigModal.updateOne(
       { address: adminAddress },
-      { $set: { 'txBuilding': false } }
+      { $set: { txBuilding: false } }
     )
 
     return {
@@ -305,21 +292,11 @@ export const generateInitialRuneSwapPsbt = async (
   userPubkey: string,
   userAddress: string,
   sendingAmount: number,
-  adminAddress: string
+  adminAddress: string,
+  taprootMultisig: any
 ) => {
-  const existTaprootMultisig = await TaprootMultisigModal.findOne({
-    address: adminAddress
-  })
-
-  if (!existTaprootMultisig) {
-    return {
-      success: false,
-      data: "Admin adress is not existed",
-    }
-  }
-
-  // console.log('existTaprootMultisig?.txBuilding :>> ', existTaprootMultisig?.txBuilding);
-  // if (existTaprootMultisig?.txBuilding === true) {
+  // console.log('taprootMultisig?.txBuilding :>> ', taprootMultisig?.txBuilding);
+  // if (taprootMultisig?.txBuilding === true) {
   //   return {
   //     success: false,
   //     data: "utxo is on re-building"
@@ -328,13 +305,13 @@ export const generateInitialRuneSwapPsbt = async (
 
   const result = await TaprootMultisigModal.updateOne(
     { address: adminAddress },
-    { $set: { 'txBuilding': true } }
+    { $set: { txBuilding: true } }
   );
 
-  const assets = existTaprootMultisig.assets;
-  const pubkeyList = existTaprootMultisig.cosigner;
-  const threshold = existTaprootMultisig.threshold;
-  const privateKey = existTaprootMultisig.privateKey;
+  const assets = taprootMultisig.assets;
+  const pubkeyList = taprootMultisig.cosigner;
+  const threshold = taprootMultisig.threshold;
+  const privateKey = taprootMultisig.privateKey;
 
   const adminRuneId1 = assets?.runeId1 as string;
   const adminRuneId2 = assets?.runeId2 as string;
@@ -377,14 +354,15 @@ export const generateInitialRuneSwapPsbt = async (
   if (userRuneUtxos.tokenSum < sendingAmount * Math.pow(10, userDivisibility) || adminRuneUtxos1.tokenSum < Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDivisibility1) || adminRuneUtxos2.tokenSum < Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDivisibility1)) {
     const result = await TaprootMultisigModal.updateOne(
       { address: adminAddress },
-      { $set: { 'txBuilding': false } }
+      { $set: { txBuilding: false } }
     );
 
     console.log('update taproot modal :>> ', result);
 
     return {
       success: false,
-      data: "Rune is not enough",
+      message: "Rune is not enough",
+      payload: undefined,
     }
   }
 
@@ -435,8 +413,8 @@ export const generateInitialRuneSwapPsbt = async (
         runeutxo.value
       )
 
-      userCnt++;
       multisigInputArray.push(userCnt);
+      userCnt++;
       adminTokenSum1 += runeutxo.amount;
     }
   }
@@ -465,8 +443,8 @@ export const generateInitialRuneSwapPsbt = async (
         runeutxo.vout,
         runeutxo.value
       )
-      userCnt++;
       multisigInputArray.push(userCnt);
+      userCnt++;
       adminTokenSum2 += runeutxo.amount;
     }
   }
@@ -557,12 +535,13 @@ export const generateInitialRuneSwapPsbt = async (
   if (totalBtcAmount < fee) {
     const result = await TaprootMultisigModal.updateOne(
       { address: adminAddress },
-      { $set: { 'txBuilding': false } }
+      { $set: { txBuilding: false } }
     );
 
     return {
       success: false,
-      data: "BTC balance is not enough"
+      message: "BTC balance is not enough",
+      payload: undefined
     }
   };
 
@@ -573,7 +552,8 @@ export const generateInitialRuneSwapPsbt = async (
 
   return {
     success: true,
-    data: {
+    message: "Generate swap psbt successfully",
+    payload: {
       psbt: psbt.toHex(),
       userInputArray: userInputArray,
       multisigInputArray: multisigInputArray,
@@ -582,3 +562,34 @@ export const generateInitialRuneSwapPsbt = async (
     }
   }
 };
+
+export const updateTxBuildingModal = async (
+  adminAddress: string
+) => {
+  const taprootMultisig = await TaprootMultisigModal.findOne({
+    address: adminAddress
+  })
+
+  if (!taprootMultisig) {
+    return {
+      success: false,
+      message: "Admin adress is not existed",
+      payload: undefined
+    }
+  }
+
+  if (!taprootMultisig.txBuilding) {
+    const result = await TaprootMultisigModal.updateOne(
+      { address: adminAddress },
+      { $set: { txBuilding: false } }
+    );
+
+    console.log('result :>> ', result);
+  }
+
+  return {
+    success: true,
+    message: "Status is updated successfully",
+    payload: undefined
+  }
+}
