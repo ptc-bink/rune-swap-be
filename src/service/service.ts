@@ -14,15 +14,11 @@ const ecc = require("@bitcoinerlab/secp256k1");
 bitcoin.initEccLib(ecc);
 dotenv.config();
 
-const privateKey: string = process.env.WIF_KEY as string;
-
 const OPENAPI_UNISAT_URL = testVersion ? "https://open-api-testnet.unisat.io" : "https://open-api.unisat.io";
-
-export const adminWallet = new LocalWallet(privateKey as string, testVersion ? 1 : 0);
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-export const toXOnly = (pubKey: string) => pubKey.length == 32 ? pubKey : pubKey.slice(1, 33);
+// export const toXOnly = (pubKey: string) => pubKey.length == 32 ? pubKey : pubKey.slice(1, 33);
 
 export function toPsbtNetwork(networkType: number) {
     if (networkType == 0) {
@@ -106,7 +102,6 @@ export const getBtcUtxoByAddress = async (address: string) => {
     return utxos;
 };
 
-// Get Current Network Fee
 export const getFeeRate = async () => {
     try {
         const url = `https://mempool.space/${testVersion ? "testnet/" : ""

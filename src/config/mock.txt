@@ -1,4 +1,0 @@
-txId = "7d25861fa92851763bcbb57dd37c21d8ab4c4143958168cc430d759462d1ec80"
-adminRuneAmount1 = "420"
-adminRuneAmount2 = "420"
-txBuilding = "false"
