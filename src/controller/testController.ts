@@ -7,9 +7,12 @@ import { toXOnly } from "bitcoinjs-lib/src/psbt/bip371";
 import {
     calculateTxFee,
     delay,
+    generateSeed,
     getBtcUtxoByAddress,
     getFeeRate,
-    getRuneUtxoByAddress
+    getRuneUtxoByAddress,
+    pushBTCpmt,
+    pushRawTx
 } from '../service/service';
 import {
     userRuneId,
@@ -20,15 +23,23 @@ import {
     adminVout2,
     userDivisibility,
     testFeeRate,
+    SPLIT_ADDRESS_SIZE,
 } from '../config/config';
-import { WalletTypes } from '../config/type';
+import { IMusigAssets, ITreeItem, WalletTypes } from '../utils/type';
 import TaprootMultisigModal from "../model/TaprootMultisig";
 import { TaprootMultisigWallet } from "../service/mutisigWallet";
-import dotenv from 'dotenv';
+import { treeTravelAirdrop } from '../service/tree/treeTravelAirdrop';
+import { whiteList } from '../config/UpdateWhiteList';
+import { splitData } from '../utils/splitArray';
+import { SeedWallet } from '../service/wallet/SeedWallet';
+import initializeWallet from '../service/wallet/initializeWallet';
+import { networkType } from '../config/config';
+import { createTreeData } from '../service/tree/createTree';
+import { sendRuneBtcTransaction } from '../service/psbt/sendRuneBtcTransaction';
+import app from '../server';
 
 const ecc = require("@bitcoinerlab/secp256k1");
 bitcoin.initEccLib(ecc);
-dotenv.config();
 
 const network = testVersion ? bitcoin.networks.testnet : bitcoin.networks.bitcoin;
 
@@ -265,3 +276,148 @@ export const testGenerateInitialRuneSwapPsbt = async (
         }
     }
 };
+
+export const testAirdropDifferentAmount = async (
+    feeRate: number,
+    adminAddress: string
+) => {
+    if (whiteList.length > SPLIT_ADDRESS_SIZE) {
+        return {
+            success: false,
+            message: `the size of address list is more than ${SPLIT_ADDRESS_SIZE}`,
+            payload: undefined
+        }
+    }
+
+    const taprootMultisig = await TaprootMultisigModal.findOne(
+        { address: adminAddress }
+    )
+
+    if (!taprootMultisig) {
+        return {
+            success: false,
+            message: `There is no such multisig wallet of ${adminAddress}`,
+            payload: undefined
+        }
+    }
+
+    const pubkeyList = taprootMultisig.cosigner;
+
+    const leafPubkeys = pubkeyList.map((pubkey: string) =>
+        toXOnly(Buffer.from(pubkey, "hex"))
+    );
+    const threshold = taprootMultisig.threshold;
+    const privateKey = taprootMultisig.privateKey;
+
+    const multiSigAssets: IMusigAssets = {
+        leafPubkeys: leafPubkeys,
+        threshold: threshold,
+        privateKey: privateKey,
+    }
+
+    // First airdrop from master wallet
+    app.locals.walletIndex = 0;
+
+    // Split large address data into smaller data array
+    let splitDataArray: Array<any> = splitData(whiteList, SPLIT_ADDRESS_SIZE);
+
+    // Array => one item has btc anount, rune token amount
+    let bundledDataArray: Array<any> = [];
+
+    // Array => splited treeDataarray
+    let treeDataArray: Array<ITreeItem> = [];
+
+    // initialize wallet index global variable
+    app.locals.walletIndex = 0;
+    // const seed = await generateSeed();
+    const seed = "innocent rubber iron method session sentence bus plate stamp assist hub cute";
+
+    for (let i = 0; i < splitDataArray.length; i++) {
+        app.locals.walletIndex = i + 1;
+        let wallet: SeedWallet = initializeWallet(
+            networkType,
+            seed,
+            app.locals.walletIndex
+        );
+
+        // Create tree Data structure
+        let treeData: ITreeItem = createTreeData(splitDataArray[i], feeRate, seed);
+        treeDataArray.push(treeData);
+
+        console.log('treeData :>> ', treeData);
+        console.log("==========================");
+
+        bundledDataArray.push({
+            address: wallet.address,
+            rune_amount: treeData.total_amount,
+            btc_amount: treeData.utxo_value,
+        });
+    }
+
+    // format wallet index global variable
+    app.locals.walletIndex = 0;
+
+    // log the initial tree data btc utxo, total rune token amount
+    console.log("bundledDataArray => ", bundledDataArray);
+
+    // Send BTC utxo containing rune token
+    const response = await sendRuneBtcTransaction(
+        userRuneId,
+        bundledDataArray,
+        feeRate,
+        multiSigAssets,
+    );
+
+    // if creating psbt is failed, return 500 error
+    if (!response.isSuccess) {
+        return {
+            success: false,
+            message: response.data,
+            payload: undefined
+        }
+    }
+
+    console.log('txHex :>> ', response.payload.txHex);
+
+    const txId = await pushRawTx(response.payload.txHex);
+
+    ////////////////////////////////////////////////////////////////////////////////
+    // remove on live version
+    // const txId: string = "07dfe41da2981d730e3cc900cfbd9268c7c30fb335df0e2dbd8ee8992a38575e";
+    //
+    ////////////////////////////////////////////////////////////////////////////////
+
+    console.log("Sent Fee and UTXO Transaction => ", txId);
+
+    for (let i = 0; i < bundledDataArray.length; i++) {
+        // First airdrop from master wallet
+        app.locals.walletIndex = i + 1;
+
+        treeDataArray[i] = {
+            ...treeDataArray[i],
+            utxo_txid: txId,
+            utxo_vout: i + 2,
+        };
+
+        console.log('treeDataArray[i] :>> ', treeDataArray[i]);
+
+        // Start Root tour based on recursive function
+        let resultData: ITreeItem = await treeTravelAirdrop(
+            treeDataArray[i],
+            userRuneId,
+            seed
+        );
+
+        // log the airdrop result
+        console.log(`Congratulations! Different Amount Runestone airdrop Success - ${i + 1} Bunches!`);
+    }
+
+    // First airdrop from master wallet
+    app.locals.walletIndex = 0;
+
+    return {
+        success: true,
+        message: "Congratulations! Different Amount Runestone airdrop Success",
+        payload: undefined
+    }
+}

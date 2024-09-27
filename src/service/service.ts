@@ -4,14 +4,18 @@ import {
     OPENAPI_UNISAT_TOKEN,
     testVersion,
     SIGNATURE_SIZE,
-    OPENAPI_UNISAT_URL
+    OPENAPI_UNISAT_URL,
+    testFeeRate
 } from '../config/config';
-import { IRuneUtxo, IUtxo } from '../config/type';
-import axios from 'axios';
+import { IRuneUtxo, ITXSTATUS, IUtxo } from '../utils/type';
+import axios, { AxiosResponse } from 'axios';
+import { none, RuneId, Runestone } from "runelib";
+import * as bip39 from 'bip39';
 
 const ecc = require("@bitcoinerlab/secp256k1");
 bitcoin.initEccLib(ecc);
 
+const network = testVersion ? bitcoin.networks.testnet : bitcoin.networks.bitcoin;
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 // export const toXOnly = (pubKey: string) => pubKey.length == 32 ? pubKey : pubKey.slice(1, 33);
@@ -151,6 +155,7 @@ const postData = async (
 
 export const finalizePsbtInput = (hexedPsbt: string, inputs: number[]) => {
     const psbt = bitcoin.Psbt.fromHex(hexedPsbt);
+
     inputs.forEach((input) => psbt.finalizeInput(input));
     return psbt.toHex();
 };
@@ -208,6 +213,32 @@ export const getRuneUtxoByAddress = async (address: string, runeId: string) => {
     return { runeUtxos: utxos, tokenSum };
 };
 
+// Get rune balance using unisat api
+export const getRuneBalanceByAddress = async (rune_id: string, address: string) => {
+    try {
+
+        const url = `${OPENAPI_UNISAT_URL}/v1/indexer/address/${address}/runes/${rune_id}/balance`;
+
+        const config = {
+            headers: {
+                Authorization: `Bearer ${OPENAPI_UNISAT_TOKEN}`,
+            },
+        };
+
+        let balance: number = 0;
+
+        const res = await axios.get(url, config);
+
+        if (res.data.code === -1) throw "Invalid Address";
+        else {
+            balance = res.data.data.amount;
+        }
+        return balance;
+    } catch (err) {
+        console.log(err);
+    }
+};
+
 export const combinePsbt = async (
     hexedPsbt: string,
     signedHexedPsbt1: string,
@@ -222,6 +253,7 @@ export const combinePsbt = async (
         } else {
             psbt.combine(signedPsbt1);
         }
+
         const tx = psbt.extractTransaction();
         const txHex = tx.toHex();
 
@@ -232,3 +264,193 @@ export const combinePsbt = async (
         throw error;
     }
 };
+
+export const pushBTCpmt = async (rawtx: any) => {
+    // delay 250 ms to prevent transaction push limit
+    delay(250);
+
+    const txid = await postData(
+        `https://mempool.space/${testVersion ? "testnet/" : ""}api/tx`,
+        rawtx
+    );
+
+    return txid;
+};
+
+export async function getDummyFee(sendingAmount: number) {
+    const feeRate = 1;
+
+    const runeUtxos = {
+        runeUtxos: [
+            {
+                scriptpubkey: '5120531d53643cd23f71ad7a56fc19415936d9bcc08bdc378a8b193ac9b2e7e921a6',
+                txid: 'bd92394d73429bd6356c734c75eac673100b776c11a7199c9cadfb599b8c7ae1',
+                value: 546,
+                vout: 1,
+                amount: 500,
+                divisibility: 0
+            },
+            {
+                scriptpubkey: '5120531d53643cd23f71ad7a56fc19415936d9bcc08bdc378a8b193ac9b2e7e921a6',
+                txid: 'dd92394d73429bd6356c734c75eac673100b776c11a7199c9cadfb599b8c7ae1',
+                value: 546,
+                vout: 1,
+                amount: 500,
+                divisibility: 0
+            },
+            {
+                scriptpubkey: '5120531d53643cd23f71ad7a56fc19415936d9bcc08bdc378a8b193ac9b2e7e921a6',
+                txid: 'cd92394d73429bd6356c734c75eac673100b776c11a7199c9cadfb599b8c7ae1',
+                value: 546,
+                vout: 1,
+                amount: 500,
+                divisibility: 0
+            }],
+        tokenSum: 500
+    };
+
+    const btcUtxos = [
+        {
+            scriptpubkey: '5120531d53643cd23f71ad7a56fc19415936d9bcc08bdc378a8b193ac9b2e7e921a6',
+            txid: '12eec183159fa1b1e0054c7a8c2915a4bd00c30b8961cde05ead11ad20a18f24',
+            value: 3608651,
+            vout: 3
+        }
+    ]
+
+    const psbt = new bitcoin.Psbt({ network });
+
+    const edicts: any = [];
+
+    let fee;
+
+    let tokenSum = 0;
+
+    // create rune utxo input && edict
+    for (const runeutxo of runeUtxos.runeUtxos) {
+
+        if (tokenSum < sendingAmount) {
+            psbt.addInput({
+                hash: runeutxo.txid,
+                index: runeutxo.vout,
+                tapInternalKey: Buffer.from("03678b5f94666fa167dc90efa49e037ba2a2fb4d0fd56c8df1a0a505882b3d1e6e", "hex").slice(1, 33),
+                witnessUtxo: {
+                    value: runeutxo.value,
+                    script: Buffer.from(runeutxo.scriptpubkey, "hex")
+                },
+            });
+            tokenSum += runeutxo.amount;
+        }
+    }
+    edicts.push({
+        id: new RuneId(2818689, 38),
+        amount: sendingAmount,
+        output: 2,
+    })
+
+    edicts.push({
+        id: new RuneId(2818689, 38),
+        amount: tokenSum - sendingAmount,
+        output: 1,
+    });
+
+    const mintstone = new Runestone(
+        edicts,
+        none(),
+        none(),
+        none()
+    );
+
+    psbt.addOutput({
+        script: mintstone.encipher(),
+        value: 0,
+    });
+
+    psbt.addOutput({
+        address: "tb1pw7dtq290mkjq36q3yv5h2s3wz79k2696zftd0ctsydruwjxktlrs8x8cmh", // rune sender address
+        value: 546,
+    });
+
+    // add rune receiver address
+    psbt.addOutput({
+        address: "tb1p2vw4xepu6glhrtt62m7pjs2exmvmesytmsmc4zce8tym9elfyxnq6506a5", // rune receiver address
+        value: 546,
+    });
+
+    // add btc utxo input
+    let totalBtcAmount = 0;
+    for (const btcutxo of btcUtxos) {
+        const fee = calculateTxFee(psbt, feeRate);
+        if (
+            totalBtcAmount < fee &&
+            btcutxo.value > 10000
+        ) {
+            totalBtcAmount += btcutxo.value;
+
+            psbt.addInput({
+                hash: btcutxo.txid,
+                index: btcutxo.vout,
+                tapInternalKey: Buffer.from("03678b5f94666fa167dc90efa49e037ba2a2fb4d0fd56c8df1a0a505882b3d1e6e", "hex").slice(1, 33),
+                witnessUtxo: {
+                    script: Buffer.from(btcutxo.scriptpubkey as string, "hex"),
+                    value: btcutxo.value,
+                },
+            });
+        }
+    }
+
+    fee = calculateTxFee(psbt, feeRate);
+
+    console.log("Pay Fee =====================>", fee);
+
+    if (totalBtcAmount < fee) throw "BTC balance is not enough";
+
+    console.log("totalBtcAmount ====>", totalBtcAmount);
+
+    psbt.addOutput({
+        address: "tb1p2vw4xepu6glhrtt62m7pjs2exmvmesytmsmc4zce8tym9elfyxnq6506a5",
+        value: 10000
+    })
+    psbt.addOutput({
+        address: "tb1pw7dtq290mkjq36q3yv5h2s3wz79k2696zftd0ctsydruwjxktlrs8x8cmh",
+        value: 10000
+    })
+
+    fee = calculateTxFee(psbt, feeRate);
+
+
+    console.log("psbt ============>", psbt.toHex());
+    console.log('fee :>> ', fee);
+
+
+    return fee;
+}
+
+export const checkTxConfirmed = async (txid: string) => {
+    const url = `https://mempool.space/${testVersion ? "testnet/" : ""}api/tx/${txid}`;
+
+    console.log("txid ===>", txid);
+
+
+    const response: AxiosResponse = await axios.get(url);
+
+    const data: ITXSTATUS = response.data !== "Transaction not found"
+        ? response.data.status
+        : undefined;
+
+    console.log("status :", data, "======>", data.confirmed);
+
+    if (data.confirmed) {
+        return true;
+    } else {
+        console.log(`Transaction ${txid} is not yet confirmed.`)
+        return false;
+    }
+}
+
+// Generate a seed key
+export const generateSeed = async () => {
+    const mnemonic = bip39.generateMnemonic();
+
+    return  mnemonic;
+}

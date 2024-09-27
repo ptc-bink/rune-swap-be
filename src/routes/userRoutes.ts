@@ -1,19 +1,19 @@
 import { Router } from 'express';
-import { createTaprootMultisig } from '../controller/taprootController';
+import TaprootMultisigModal from '../model/TaprootMultisig';
 
-const withrawRouter = Router();
+const userRouter = Router();
 
-withrawRouter.use(async (req, res, next)  => {
+userRouter.use(async (req, res, next) => {
     console.log('');
     console.log(`Request received for ${req.method} ${req.url}`);
     next();
 })
 
-withrawRouter.post('/generateTaprootMultisig', async (req, res, next) => {
+userRouter.get('/getTaprootMusigList', async (req, res, next) => {
     try {
-        const payload = await createTaprootMultisig();
+        const taprootMulsigList = await TaprootMultisigModal.find();
 
-        console.log("payload after create taproot multisig ==> ", payload);
+        const payload = taprootMulsigList.map((item: any) => { return item.address });
 
         return res.status(200).send(payload);
     } catch (error: any) {
@@ -26,4 +26,4 @@ withrawRouter.post('/generateTaprootMultisig', async (req, res, next) => {
     }
 });
 
-export default withrawRouter;
+export default userRouter;

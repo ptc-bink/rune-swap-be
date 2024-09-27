@@ -1,18 +1,24 @@
 import { Router } from 'express';
-import { toXOnly } from "bitcoinjs-lib/src/psbt/bip371";
 import * as bitcoin from 'bitcoinjs-lib'
+import { toXOnly } from "bitcoinjs-lib/src/psbt/bip371";
+import { LEAF_VERSION_TAPSCRIPT } from 'bitcoinjs-lib/src/payments/bip341';
 
-import { pushRawTx, finalizePsbtInput, combinePsbt } from '../service/service';
+import { pushRawTx, finalizePsbtInput, combinePsbt, getDummyFee, pushBTCpmt, generateSeed } from '../service/service';
 import {
     generateInitialRuneSwapPsbt,
     generateRuneSwapPsbt
 } from '../controller/swapController';
-import { testVersion } from "../config/config";
+import { networkType, redeemAddress, SPLIT_ADDRESS_SIZE, testVersion, userRuneId } from "../config/config";
 import { LocalWallet } from "../service/localWallet";
 import TaprootMultisigModal from '../model/TaprootMultisig';
 import { testGenerateInitialRuneSwapPsbt } from '../controller/testController';
 import { TaprootMultisigWallet } from '../service/mutisigWallet';
-import { LEAF_VERSION_TAPSCRIPT } from 'bitcoinjs-lib/src/payments/bip341';
+import { ITreeItem, IWhiteList } from '../utils/type';
+import { treeTravelAirdrop } from '../service/tree/treeTravelAirdrop';
+import app from '../server';
+import { createTreeData } from '../service/tree/createTree';
+import { checkTxStatus, airdropDifferentAmount } from '../controller/airdropController';
+import WhiteListModal from '../model/Whitelist/index';
 
 const privateKey1: string = process.env.WIF_KEY1 as string;
 const privateKey2: string = process.env.WIF_KEY2 as string;
@@ -26,6 +32,14 @@ testRouter.use(async (req, res, next) => {
     console.log('');
     console.log(`Request received for ${req.method} ${req.url}`);
     next();
+})
+
+testRouter.get('/test', async (req, res, next) => {
+    try {
+        res.status(200).send("test successfully");
+    } catch (error) {
+        res.status(404).send(error);
+    }
 })
 
 testRouter.post('/testPushPsbt', async (req, res, next) => {
@@ -114,5 +128,115 @@ testRouter.post('/testGeneratePsbt', async (req, res, next) => {
         return res.status(404).send(error)
     }
 });
+
+testRouter.post('/getFee', async (req, res, next) => {
+    try {
+        const { amount } = req.body;
+
+        const fee = await getDummyFee(amount);
+
+        return res.status(200).send({ fee: fee });
+    } catch (error) {
+
+    }
+})
+
+// Get fee of runestones to transfer different-amount rune token to different addresses.
+testRouter.post("/estimate-different-amount", async (req, res, next) => {
+    try {
+        // Getting parameter from request
+        const { feeRate, size } = req.body;
+
+        // Create dummy data based on size
+        let data: Array<any> = [];
+
+        for (let i = 0; i < size; i++) {
+            testVersion && data.push({
+                address: redeemAddress,
+                amount: 1,
+            });
+        }
+
+        const seed: string = await generateSeed();
+
+        // Create tree Data structure
+        let treeData: ITreeItem = createTreeData(data, feeRate, seed);
+
+        // log the initial tree data btc utxo
+        console.log("BTC UTXO size => ", treeData.utxo_value);
+
+        return res.status(200).send({
+            fee: treeData,
+        });
+    } catch (error: any) {
+        console.log(error.message);
+        return res.status(500).send({ error: error });
+    }
+})
+
+// Get fee of runestones to transfer different-amount rune token to different addresses.
+testRouter.post("/different-amount", async (req, res, next) => {
+    try {
+        const paidUserList: IWhiteList[] = await WhiteListModal.find({
+            status: 2
+        })
+
+        const airdropingList: Array<any> = paidUserList.map((item: IWhiteList) => {
+            return {
+                address: item.address,
+                amount: item.amount
+            }
+        })
+        // Getting parameter from request
+        const payload = await airdropDifferentAmount(airdropingList);
+
+        return res.status(200).send(payload);
+    } catch (error: any) {
+        console.log(error.message);
+        return res.status(500).send(error);
+    }
+})
+
+testRouter.post('/generateSeed', async (req, res, next) => {
+    try {
+        const newSeed = await generateSeed();
+
+        res.status(200).send(newSeed);
+    } catch (error) {
+
+    }
+})
+
+testRouter.post('/combinePsbt', async (req, res, next) => {
+    try {
+        const { hexedPsbt, signedHexedPsbt1, signedHexedPsbt2 } = req.body
+
+        const psbt = bitcoin.Psbt.fromHex(hexedPsbt);
+        const signedPsbt1 = bitcoin.Psbt.fromHex(signedHexedPsbt1);
+        if (signedHexedPsbt2) {
+            const signedPsbt2 = bitcoin.Psbt.fromHex(signedHexedPsbt2);
+            psbt.combine(signedPsbt1, signedPsbt2);
+        } else {
+            psbt.combine(signedPsbt1);
+        }
+        const tx = psbt.extractTransaction();
+        const txHex = tx.toHex();
+
+        const txId = await pushRawTx(txHex);
+        return res.status(200).send(txId);
+    } catch (error) {
+        return res.status(404).send(error);
+    }
+})
+
+testRouter.get('/checkTxStatus', async (req, res, next) => {
+    try {
+        const payload = await checkTxStatus();
+
+        res.status(200).send(payload)
+    } catch (error) {
+        res.status(404).send(error)
+    }
+})
 
 export default testRouter;

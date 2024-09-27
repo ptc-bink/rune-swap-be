@@ -6,12 +6,12 @@ import { pushRawTx, finalizePsbtInput, combinePsbt } from '../service/service';
 import {
     generateInitialRuneSwapPsbt,
     generateRuneSwapPsbt,
+    pushSwapPsbt,
     updateTxBuildingModal
 } from '../controller/swapController';
 import { testVersion } from "../config/config";
 import { LocalWallet } from "../service/localWallet";
 import TaprootMultisigModal from '../model/TaprootMultisig';
-import { pushSwapPsbt } from '../controller/taprootController';
 
 const privateKey1: string = process.env.WIF_KEY1 as string;
 const privateKey2: string = process.env.WIF_KEY2 as string;
@@ -49,7 +49,7 @@ swapRouter.post('/generatePsbt', async (req, res, next) => {
         } else {
             return res.status(200).send({
                 success: false,
-                message: "Admin adress is not existed",
+                message: "Musig adress is not existed",
                 payload: undefined
             })
         }

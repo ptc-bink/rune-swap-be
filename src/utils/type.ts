@@ -6,6 +6,15 @@ export interface IRuneUtxo {
     amount: number;
 }
 
+export interface IWhiteList {
+    musigId: string,
+    address: string,
+    amount: string,
+    status: number
+    sendBtcTxId: string,
+    receiveRuneTxId: string,
+}
+
 export interface IUTXO {
     txid: string;
     vout: number;
@@ -29,7 +38,9 @@ export interface IUtxo {
     txid: string;
     vout: number;
     value: number;
-    scriptpubkey: string;
+    scriptpubkey?: string;
+    amount?: number,
+    divisibility?: number
 }
 
 export interface IRuneUtxo {
@@ -46,4 +57,31 @@ export enum WalletTypes {
     XVERSE = "Xverse",
     HIRO = "Hiro",
     OKX = "Okx",
+}
+
+// Initialize tree element file type
+export interface ITreeItem {
+    address: string;
+    total_amount: number;
+    children: Array<ITreeItem>;
+    utxo_value: number;
+    utxo_txid: string;
+    utxo_vout: number;
+}
+
+export interface IWIFWallet {
+    networkType: string;
+    privateKey: string;
+}
+
+export interface ISeedWallet {
+    networkType: string;
+    seed: string;
+    index: number;
+}
+
+export interface IMusigAssets {
+    leafPubkeys: any,
+    threshold: number,
+    privateKey: string,
 }

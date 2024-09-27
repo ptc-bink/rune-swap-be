@@ -4,8 +4,12 @@ import { Taptree } from "bitcoinjs-lib/src/types";
 import { toXOnly } from "bitcoinjs-lib/src/psbt/bip371";
 import { tapleafHash, LEAF_VERSION_TAPSCRIPT } from 'bitcoinjs-lib/src/payments/bip341';
 
-import { testVersion } from "../config/config";
+import { privateKey1, privateKey2, testVersion } from "../config/config";
 import { finalizePsbtInput } from "./service";
+import ECPairFactory from 'ecpair';
+
+const ECPair = ECPairFactory(ecc);
+const network = testVersion ? bitcoin.networks.testnet : bitcoin.networks.bitcoin;
 
 function makeUnspendableInternalKey(provableNonce?: Buffer): Buffer {
   // This is the generator point of secp256k1. Private key is known (equal to 1)
@@ -260,7 +264,7 @@ export class TaprootMultisigWallet {
 
 export const signAndFinalizeTaprootMultisig = async (
   taprootMultisig: any,
-  signedPSBT: string,
+  psbt: string,
   inputArr: Array<number>
 ) => {
   const pubkeyList = taprootMultisig.cosigner;
@@ -278,13 +282,23 @@ export const signAndFinalizeTaprootMultisig = async (
     LEAF_VERSION_TAPSCRIPT
   ).setNetwork(testVersion ? bitcoin.networks.testnet : bitcoin.networks.bitcoin);
 
-  console.log("multiSigWallet ==> ", multiSigWallet);
-  console.log("signedPSBT ==> ", signedPSBT);
+  console.log("psbt ==> ", psbt);
 
-  const tempSignedPSBT = bitcoin.Psbt.fromHex(signedPSBT);
+  const tempPsbt = bitcoin.Psbt.fromHex(psbt);
 
-  multiSigWallet.addDummySigs(tempSignedPSBT);
-  const finalizedPsbt = finalizePsbtInput(tempSignedPSBT.toHex(), inputArr);
+  const keyPair1 = ECPair.fromWIF(privateKey1, network);
+  const keyPair2 = ECPair.fromWIF(privateKey2, network);
 
-  return finalizedPsbt;
+  inputArr.map((input: number) => {
+    tempPsbt.signInput(input, keyPair1);
+    tempPsbt.signInput(input, keyPair2);
+  })
+
+  await multiSigWallet.addDummySigs(tempPsbt);
+  
+  console.log('tempPsbt :>> ', tempPsbt);
+
+  inputArr.forEach((input:number) => tempPsbt.finalizeInput(input));
+
+  return tempPsbt;
 }

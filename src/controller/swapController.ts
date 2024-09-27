@@ -6,10 +6,12 @@ import { toXOnly } from "bitcoinjs-lib/src/psbt/bip371";
 
 import {
   calculateTxFee,
+  combinePsbt,
   delay,
   getBtcUtxoByAddress,
   getFeeRate,
-  getRuneUtxoByAddress
+  getRuneUtxoByAddress,
+  pushRawTx
 } from '../service/service';
 import {
   userRuneId,
@@ -20,9 +22,10 @@ import {
   adminVout2,
   userDivisibility,
   testFeeRate,
+  STANDARD_RUNE_UTXO_VALUE,
 } from '../config/config';
 import TaprootMultisigModal from "../model/TaprootMultisig";
-import { TaprootMultisigWallet } from "../service/mutisigWallet";
+import { signAndFinalizeTaprootMultisig, TaprootMultisigWallet } from "../service/mutisigWallet";
 import dotenv from 'dotenv';
 
 const ecc = require("@bitcoinerlab/secp256k1");
@@ -38,6 +41,27 @@ export const generateRuneSwapPsbt = async (
   adminAddress: string,
   taprootMultisig: any
 ) => {
+  console.log('taprootMultisig?.txBuilding :>> ', taprootMultisig?.txBuilding);
+  if (taprootMultisig?.txBuilding === true) {
+    return {
+      success: false,
+      message: "utxo is on re-building",
+      payload: undefined
+    }
+  }
+
+  let result: any;
+  result = await TaprootMultisigModal.findOneAndUpdate(
+    {
+      address: adminAddress
+    },
+    {
+      txBuilding: true
+    }
+  );
+
+  await result?.save();
+
   const pubkeyList = taprootMultisig.cosigner;
   const assets = taprootMultisig?.assets;
   const threshold = taprootMultisig.threshold;
@@ -53,22 +77,6 @@ export const generateRuneSwapPsbt = async (
     Buffer.from(privateKey, "hex"),
     LEAF_VERSION_TAPSCRIPT
   ).setNetwork(network)
-
-  if (taprootMultisig.txBuilding === true) {
-    return {
-      success: false,
-      data: "utxo is on re-building"
-    }
-  }
-
-  const result = await TaprootMultisigModal.updateOne(
-    { address: adminAddress },
-    { $set: { txBuilding: true } }
-  );
-
-  console.log('update taproot modal :>> ', result);
-
-  await delay(20000)
 
   // Fetch
   const btcUtxos = await getBtcUtxoByAddress(userAddress);
@@ -88,21 +96,26 @@ export const generateRuneSwapPsbt = async (
   const userTxout = parseInt(userRuneId.split(":")[1]);
 
   const edicts: any = [];
-  const inputArray: number[] = [];
+  const userInputArray: number[] = [];
+  const multisigInputArray: number[] = [];
   let userCnt = 0;
 
   if (userRuneUtxos.tokenSum < sendingAmount * Math.pow(10, userDivisibility) || adminRuneAmount1 < Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility1) || adminRuneAmount2 < Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDevisibility2)) {
-    const result = await TaprootMultisigModal.updateOne(
-      { address: adminAddress },
-      { $set: { txBuilding: false } }
+    result = await TaprootMultisigModal.findOneAndUpdate(
+      {
+        address: adminAddress
+      },
+      {
+        txBuilding: false
+      }
     );
 
-    console.log('update taproot modal :>> ', result);
-
+    await result?.save();
 
     return {
       success: false,
-      data: "Rune is not enough",
+      message: "Rune is not enough",
+      payload: undefined
     }
   }
 
@@ -123,7 +136,7 @@ export const generateRuneSwapPsbt = async (
         tapInternalKey: Buffer.from(pubkey, "hex").slice(1, 33)
       });
 
-      inputArray.push(userCnt);
+      userInputArray.push(userCnt);
       userCnt++;
       userTokenSum += runeutxo.amount;
     }
@@ -139,7 +152,7 @@ export const generateRuneSwapPsbt = async (
   // return user rune to user address
   edicts.push({
     id: new RuneId(userBlockNumber, userTxout),
-    amount: (userTokenSum - sendingAmount) * Math.pow(10, userDivisibility),
+    amount: userTokenSum - sendingAmount * Math.pow(10, userDivisibility),
     output: 1,
   });
 
@@ -148,8 +161,10 @@ export const generateRuneSwapPsbt = async (
     psbt,
     taprootMultisig?.txId as string,
     adminVout1,
-    adminRuneAmount1,
+    STANDARD_RUNE_UTXO_VALUE,
   )
+
+  multisigInputArray.push(userCnt);
   userCnt++;
 
   // send admin rune1 to user
@@ -166,6 +181,7 @@ export const generateRuneSwapPsbt = async (
     output: 5,
   });
 
+  multisigInputArray.push(userCnt);
   userCnt++;
 
   // create admin rune2 utxo input && edict
@@ -173,7 +189,7 @@ export const generateRuneSwapPsbt = async (
     psbt,
     taprootMultisig?.txId as string,
     adminVout2,
-    adminRuneAmount2,
+    STANDARD_RUNE_UTXO_VALUE,
   )
 
   // send admin rune2 to user address
@@ -253,7 +269,7 @@ export const generateRuneSwapPsbt = async (
         tapInternalKey: Buffer.from(pubkey, "hex").slice(1, 33)
       });
 
-      inputArray.push(userCnt);
+      userInputArray.push(userCnt);
       userCnt++;
     }
   }
@@ -261,14 +277,21 @@ export const generateRuneSwapPsbt = async (
   const fee = calculateTxFee(psbt, feeRate);  // calc entire fee
 
   if (totalBtcAmount < fee) {
-    const result = await TaprootMultisigModal.updateOne(
-      { address: adminAddress },
-      { $set: { txBuilding: false } }
-    )
+    result = await TaprootMultisigModal.findOneAndUpdate(
+      {
+        address: adminAddress
+      },
+      {
+        txBuilding: false
+      }
+    );
+
+    await result?.save();
 
     return {
       success: false,
-      data: "BTC balance is not enough"
+      message: "BTC balance is not enough",
+      payload: undefined
     }
   };
 
@@ -279,9 +302,11 @@ export const generateRuneSwapPsbt = async (
 
   return {
     success: true,
-    data: {
+    message: "Generate swap psbt successfully",
+    payload: {
       psbt: psbt.toHex(),
-      inputArray: inputArray,
+      userInputArray: userInputArray,
+      multisigInputArray: multisigInputArray,
       amount1: assets?.runeAmount1 as number - Math.floor(sendingAmount * sendingRate) * Math.pow(10, assets?.divisibility1 as number),
       amount2: assets?.runeAmount2 as number - Math.floor(sendingAmount * sendingRate) * Math.pow(10, assets?.divisibility2 as number),
     }
@@ -295,18 +320,25 @@ export const generateInitialRuneSwapPsbt = async (
   adminAddress: string,
   taprootMultisig: any
 ) => {
-  // console.log('taprootMultisig?.txBuilding :>> ', taprootMultisig?.txBuilding);
-  // if (taprootMultisig?.txBuilding === true) {
-  //   return {
-  //     success: false,
-  //     data: "utxo is on re-building"
-  //   }
-  // }
+  console.log('taprootMultisig?.txBuilding :>> ', taprootMultisig?.txBuilding);
+  if (taprootMultisig?.txBuilding === true) {
+    return {
+      success: false,
+      message: "utxo is on re-building",
+      payload: undefined
+    }
+  }
 
-  const result = await TaprootMultisigModal.updateOne(
-    { address: adminAddress },
-    { $set: { txBuilding: true } }
+  const result = await TaprootMultisigModal.findOneAndUpdate(
+    {
+      address: adminAddress
+    },
+    {
+      txBuilding: true
+    }
   );
+
+  await result?.save();
 
   const assets = taprootMultisig.assets;
   const pubkeyList = taprootMultisig.cosigner;
@@ -315,8 +347,8 @@ export const generateInitialRuneSwapPsbt = async (
 
   const adminRuneId1 = assets?.runeId1 as string;
   const adminRuneId2 = assets?.runeId2 as string;
-  const adminDivisibility1 = assets?.divisibility1 as number;
-  const adminDivisibility2 = assets?.divisibility2 as number;
+  const adminDivisibility1 = assets?.divisibility1 || 0;
+  const adminDivisibility2 = assets?.divisibility2 || 0;
 
   const leafPubkeys = pubkeyList.map((pubkey: string) =>
     toXOnly(Buffer.from(pubkey, "hex"))
@@ -329,11 +361,10 @@ export const generateInitialRuneSwapPsbt = async (
     LEAF_VERSION_TAPSCRIPT
   ).setNetwork(network)
 
-  await delay(20000)
-
   // Fetch
   const userBtcUtxos = await getBtcUtxoByAddress(userAddress);
   const userRuneUtxos = await getRuneUtxoByAddress(userAddress, userRuneId);
+
   const adminRuneUtxos1 = await getRuneUtxoByAddress(adminAddress, adminRuneId1);
   const adminRuneUtxos2 = await getRuneUtxoByAddress(adminAddress, adminRuneId2);
 
@@ -352,12 +383,16 @@ export const generateInitialRuneSwapPsbt = async (
   let userCnt = 0;
 
   if (userRuneUtxos.tokenSum < sendingAmount * Math.pow(10, userDivisibility) || adminRuneUtxos1.tokenSum < Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDivisibility1) || adminRuneUtxos2.tokenSum < Math.floor(sendingAmount * sendingRate) * Math.pow(10, adminDivisibility1)) {
-    const result = await TaprootMultisigModal.updateOne(
-      { address: adminAddress },
-      { $set: { txBuilding: false } }
+    const result = await TaprootMultisigModal.findOneAndUpdate(
+      {
+        address: adminAddress
+      },
+      {
+        txBuilding: false
+      }
     );
 
-    console.log('update taproot modal :>> ', result);
+    await result?.save();
 
     return {
       success: false,
@@ -369,6 +404,7 @@ export const generateInitialRuneSwapPsbt = async (
   const psbt = new bitcoin.Psbt({ network })
 
   let userTokenSum = 0;
+
   // create user rune utxo input && edict
   for (const runeutxo of userRuneUtxos.runeUtxos) {
     if (userTokenSum < sendingAmount * Math.pow(10, userDivisibility)) {
@@ -398,7 +434,7 @@ export const generateInitialRuneSwapPsbt = async (
   // return user rune to user address
   edicts.push({
     id: new RuneId(userBlockNumber, userTxout),
-    amount: (userTokenSum - sendingAmount) * Math.pow(10, userDivisibility),
+    amount: userTokenSum - sendingAmount * Math.pow(10, userDivisibility),
     output: 1,
   });
 
@@ -529,14 +565,19 @@ export const generateInitialRuneSwapPsbt = async (
       userCnt++;
     }
   }
-
   const fee = calculateTxFee(psbt, feeRate);  // calc entire fee
 
   if (totalBtcAmount < fee) {
-    const result = await TaprootMultisigModal.updateOne(
-      { address: adminAddress },
-      { $set: { txBuilding: false } }
+    const result = await TaprootMultisigModal.findOneAndUpdate(
+      {
+        address: adminAddress
+      },
+      {
+        txBuilding: false
+      }
     );
+
+    await result?.save();
 
     return {
       success: false,
@@ -578,13 +619,15 @@ export const updateTxBuildingModal = async (
     }
   }
 
-  if (!taprootMultisig.txBuilding) {
-    const result = await TaprootMultisigModal.updateOne(
+  if (taprootMultisig.txBuilding) {
+    const updateModal = await TaprootMultisigModal.findOneAndUpdate(
       { address: adminAddress },
-      { $set: { txBuilding: false } }
+      {
+        txBuilding: false
+      }
     );
 
-    console.log('result :>> ', result);
+    await updateModal?.save();
   }
 
   return {
@@ -593,3 +636,80 @@ export const updateTxBuildingModal = async (
     payload: undefined
   }
 }
+
+export const pushSwapPsbt = async (
+  psbt: string,
+  userSignedHexedPsbt: string,
+  userInputArray: Array<number>,
+  multisigInputArray: Array<number>,
+  adminAddress: string,
+  amount1: number,
+  amount2: number,
+) => {
+
+  const taprootMultisig = await TaprootMultisigModal.findOne({ address: adminAddress });
+
+  if (!taprootMultisig) return {
+    success: false,
+    message: `${adminAddress} is not existed`,
+    payload: "",
+  };
+
+  const userSignedPsbt = bitcoin.Psbt.fromHex(userSignedHexedPsbt);
+
+  // tempuserInputArray.forEach((input: number) => userSignedPsbt.finalizeInput(input));
+  userInputArray.forEach((input: number) => userSignedPsbt.finalizeInput(input));
+
+  // const finalizedMultisigPsbt = await signAndFinalizeTaprootMultisig(taprootMultisig, userSignedPsbt.toHex(), multisigInputArray);
+  const finalizedMultisigPsbt = await signAndFinalizeTaprootMultisig(taprootMultisig, psbt, multisigInputArray);
+
+  // console.log('finalizedMultisigPsbt :>> ', finalizedMultisigPsbt);
+  // const tx = finalizedMultisigPsbt.extractTransaction();
+  //       const txHex = tx.toHex();
+
+  //       const txId = await pushRawTx(txHex);
+  const txId = await combinePsbt(psbt, finalizedMultisigPsbt.toHex(), userSignedPsbt.toHex());
+
+  if (txId) {
+    const existMultisig = await TaprootMultisigModal.findOne({ address: adminAddress });
+
+    const updateModal = await TaprootMultisigModal.findOneAndUpdate(
+      { address: adminAddress },
+      {
+        txBuilding: false,
+        txId: txId,
+        assets: {
+          runeId1: existMultisig?.assets?.runeId1,
+          runeId2: existMultisig?.assets?.runeId2,
+          divisibility1: existMultisig?.assets?.divisibility1,
+          divisibility2: existMultisig?.assets?.divisibility2,
+          runeAmount1: amount1,
+          runeAmount2: amount2,
+        }
+      }
+    );
+
+    await updateModal?.save();
+
+    return {
+      success: true,
+      message: `Push swap psbt successfully`,
+      payload: txId,
+    };
+  } else {
+    const result = await TaprootMultisigModal.findOneAndUpdate(
+      {
+        address: adminAddress
+      },
+      {
+        txBuilding: false
+      }
+    );
+
+    return {
+      success: false,
+      message: `Push swap psbt failed`,
+      payload: undefined,
+    };
+  }
+};

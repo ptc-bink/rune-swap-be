@@ -13,10 +13,10 @@ const TaprootMultisig = new mongoose.Schema({
   assets: {
     runeId1: { type: String, required: false },
     runeId2: { type: String, required: false },
-    divisibility1: { type: Number, required: false },
-    divisibility2: { type: Number, required: false },
     runeAmount1: { type: Number, required: false },
     runeAmount2: { type: Number, required: false },
+    divisibility1: { type: Number, required: false },
+    divisibility2: { type: Number, required: false },
   },
   createdAt: { type: Date, default: new Date() },
 });
