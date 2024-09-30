@@ -115,7 +115,7 @@ export const generateSendBTCPsbt = async (
         value: amount - sendBtcAmount - fee,
     });
 
-    console.log(psbt.toBase64());
+    console.log(psbt.toHex());
 
     return {
         success: true,

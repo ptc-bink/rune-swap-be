@@ -19,8 +19,7 @@ import { whiteList } from '../config/UpdateWhiteList';
 const airdropRouter = Router();
 
 airdropRouter.use(async (req, res, next) => {
-    console.log('');
-    console.log(`Request received for ${req.method} ${req.url}`);
+    console.log(`\nRequest received for ${req.method} ${req.url}`);
     next();
 })
 
