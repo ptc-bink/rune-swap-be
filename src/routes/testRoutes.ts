@@ -187,8 +187,19 @@ testRouter.post("/different-amount", async (req, res, next) => {
                 amount: item.amount
             }
         })
+
+        const tempList: any = [
+            {
+                address: 'tb1pw7dtq290mkjq36q3yv5h2s3wz79k2696zftd0ctsydruwjxktlrs8x8cmh',
+                amount: 1
+            },
+            {
+                address: 'tb1pw7dtq290mkjq36q3yv5h2s3wz79k2696zftd0ctsydruwjxktlrs8x8cmh',
+                amount: 1
+            },
+        ]
         // Getting parameter from request
-        const payload = await airdropDifferentAmount(airdropingList);
+        const payload = await airdropDifferentAmount(tempList);
 
         return res.status(200).send(payload);
     } catch (error: any) {

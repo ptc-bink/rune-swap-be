@@ -36,6 +36,8 @@ import { createTreeData } from '../service/tree/createTree';
 import { sendRuneBtcTransaction } from '../service/psbt/sendRuneBtcTransaction';
 import { treeTravelAirdrop } from '../service/tree/treeTravelAirdrop';
 import app from '../server';
+import { RuneId } from "runelib";
+import { generateTransferToOneUser } from '../service/psbt/generateAirdropOneTx';
 
 bitcoin.initEccLib(ecc);
 
@@ -130,6 +132,7 @@ export const pushSendBtcTx = async (
     rawTx: string
 ) => {
     const psbt = bitcoin.Psbt.fromHex(rawTx);
+    psbt.finalizeAllInputs();
     const tx = psbt.extractTransaction();
     const txHex = tx.toHex();
     const txId = await pushRawTx(txHex);
@@ -141,10 +144,10 @@ export const pushSendBtcTx = async (
 
         if (existingWallet) {
             const updatingListedUser = await WhiteListModal.findOneAndUpdate(
-                { 
+                {
                     address: userAddress,
-                    status : 0
-                 },
+                    status: 0
+                },
                 {
                     status: 1,
                     sendBtcTxId: txId
@@ -214,7 +217,7 @@ export const checkTxStatus = async () => {
     if (!claimedUserList.length) {
         msg += 'There is no claimed users\n';
         console.log("There is no claimed users");
-        
+
     } else {
         claimedUserList.map(async (item: IWhiteList) => {
             const confirmed = await checkTxConfirmed(item.sendBtcTxId);
@@ -240,7 +243,7 @@ export const checkTxStatus = async () => {
     if (!paidUserList.length) {
         msg += "There is no paid users\n";
         console.log("There is no paid users");
-        
+
     } else {
         const airdropingList: Array<any> = paidUserList.map((item: IWhiteList) => {
             return {
@@ -280,7 +283,7 @@ export const checkTxStatus = async () => {
 
     if (!sendRuneUserList.length) {
         console.log("There is no send rune users");
-        
+
         msg += "There is no send rune users\n";
     } else {
         sendRuneUserList.map(async (item: IWhiteList) => {
@@ -340,6 +343,18 @@ export const airdropDifferentAmount = async (
 
     // First airdrop from master wallet
     app.locals.walletIndex = 0;
+
+    if (whiteList.length === 1) {
+        const res = await generateTransferToOneUser(whiteList[0].address, whiteList[0].amount, multiSigAssets)
+
+        if (res.success) {
+            const txId = await pushRawTx(res.payload?.txHex);
+
+            console.log("Sent Fee and UTXO Transaction => ", txId);
+
+            return txId;
+        }
+    }
 
     // Split large address data into smaller data array
     let splitDataArray: Array<any> = splitData(whiteList, SPLIT_ADDRESS_SIZE);

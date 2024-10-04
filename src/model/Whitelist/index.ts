@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const WhiteList = new mongoose.Schema({
     address: { type: String, required: true },
-    amount: { type: String, required: true },
+    amount: { type: Number, required: true },
     status: { type: Number, required: true },
     sendBtcTxId: { type: String, required: false },
     receiveRuneTxId: { type: String, required: false },
